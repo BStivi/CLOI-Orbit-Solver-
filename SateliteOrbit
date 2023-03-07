@@ -1,0 +1,138 @@
+#%%
+import rebound
+import numpy as np
+import matplotlib.pyplot as plt
+plt.rcParams.update(plt.rcParamsDefault)
+#plt.rcParams['text.usetex'] = True
+import reboundx
+rebound.__version__
+
+#Initialize REBOUND simulation
+sim = None #delete previous simulation variable
+sim = rebound.Simulation() #initialize simulation object 
+sim.units = ('m', 's', 'kg') #define units
+sim.integrator = 'ias15'
+sim.G=1
+ps = sim.particles
+
+
+Year = 0.01;  #How long you want the Sim to Run 
+
+
+#Adding Necesarry Parameters of CLOI
+# find a way to convert TLE time to Julian time.
+
+#1  3955U 69046E   84131.00025463 -.00000475 +00000-0 +10000-3 0  9995
+#2  3955 061.0496 050.4191 3336010 080.9349 045.4097 00.21490366011720
+# write code that can scrape TLE for necesary Data 
+
+# 1984, 131.00025463
+# 1984-05-10.00025463
+date = "JD2445830.5002546"
+
+n = 0.21490366;
+nr = n * ((2*np.pi)/86400)
+
+a = ((6.6743e-11*5.97219e24)/nr**2)**(1/3)
+
+print(a)
+Omega = 50.4191*np.pi/180. # longitude of ascending node
+inc = 61.0496*np.pi/180.
+e = 0.3336010 #eccentricity
+omega = 80.9349 *np.pi/180 # argument of pericenter
+M = 45.4097 *np.pi/180 # mean anomaly
+#mean motion, how to input in rebound
+print(M)
+CLOI_radius = 1.e-5 # CLOI radius in m
+density = 1000. # kg/m^3 = 1g/cc
+Q_pr = 1.
+luminosity = 3.85e26 # Watts
+
+#Add Sun Moon, Earth (NAIF IDs: https://naif.jpl.nasa.gov/pub/naif/toolkit 
+sim.add("Sun",date = date)
+sim.add("399", date = date)
+sim.add("Luna", date = date, primary= sim.particles[1])
+sim.add(inc = inc,  Omega=Omega, e = e,  omega=omega, a=a, M = M,  primary = sim.particles[1])
+
+Sun = sim.particles[0]
+Earth = sim.particles[1]
+Moon = sim.particles[2]
+CLOI = sim.particles[3]
+
+#Show initial positions 
+fig = plt.figure(figsize=(5,5))
+plt.xlabel("$x (\mathrm{Meters})$",fontsize=16)
+plt.ylabel("$y (\mathrm{Meters})$",fontsize=16)
+plt.title("Heliocentric positions",fontsize=16)
+plt.plot(Moon.x, Moon.y,'o',markersize=5,linewidth=0.5, color="Magenta");
+plt.plot(Earth.x, Earth.y,'o',markersize=5);
+plt.plot(CLOI.x, CLOI.y,'o',markersize=5,  color="Blue");
+plt.savefig("initial.png")
+
+'''
+#Adding Radiation force parameters
+rebx = reboundx.Extras(sim)
+rf = rebx.load_force("radiation_forces")
+rebx.add_force(rf)
+rf.params["c"] = 3.e8
+
+#ps["CLOI"].params["beta"] = rebx.rad_calc_beta(sim.G, rf.params["c"], ps[0].m, luminosity, CLOI_radius, density, Q_pr)
+#print("Particle 2's beta parameter = {0}".format(ps["p2"].params["beta"]))
+sim.save("ss.bin")
+sim.status()
+#We need to calculate Beta Parameter of the Satelite
+#Should I worry about Earth/Moon getting in the way of solar radiation?
+'''
+
+from tqdm import tqdm
+ 
+Noutputs = 500 # HOw many data points you want 
+
+
+secYear =  Year * 86400 * 365
+times = np.linspace(0,secYear, Noutputs)
+
+x_Earth = np.zeros(Noutputs)
+y_Earth = np.zeros(Noutputs)
+x_CLOI = np.zeros(Noutputs)
+y_CLOI = np.zeros(Noutputs)
+x_Moon = np.zeros(Noutputs)
+y_Moon = np.zeros(Noutputs)
+
+a = np.zeros(Noutputs)
+e = np.zeros(Noutputs)
+inc = np.zeros(Noutputs)
+
+#Run Simulation
+
+for i,time in enumerate(tqdm(times)):
+    sim.integrate(time, exact_finish_time=0)
+    #print(i)
+    inc[i] = CLOI.calculate_orbit(primary=sim.particles[1]).inc
+    e[i] = CLOI.calculate_orbit(primary=sim.particles[1]).e
+    a[i] = CLOI.calculate_orbit(primary=sim.particles[1]).a
+
+
+#Plot a, e, inc over time 
+fig1 = plt.figure(figsize=(15,5))
+
+plt.xlabel("Time (Years)",fontsize=16)
+plt.ylabel("$Inc (\mathrm{radians})$",fontsize=16)
+plt.plot(times/(86400 * 365), inc,'-',markersize=1,linewidth=1)
+plt.savefig("inclination.png")
+
+fig2 = plt.figure(figsize=(15,5))
+plt.xlabel("Time (Years)",fontsize=16)
+plt.ylabel("Eccentricity",fontsize=16)
+plt.plot(times/(86400 * 365), e,'-',markersize=1,linewidth=1)
+plt.savefig("Eccentricity.png")
+
+fig3 = plt.figure(figsize=(15,5))
+plt.xlabel("Time (Years)",fontsize=16)
+plt.ylabel("$a (\mathrm{meters})$",fontsize=16)
+plt.plot(times/(86400 * 365), a,'-',markersize=1,linewidth=1)
+plt.savefig("semimajoraxis.png")
+
+
+
+# %%
